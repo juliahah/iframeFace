@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chroma Key - Transparent Output</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+    }
+    body {
+      font-family: sans-serif;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    canvas {
+      margin-top: 20px;
+      max-width: 100%;
+      background: transparent;
+      display: block;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="uploadSection">
+    <h2>Upload Video</h2>
+    <input type="file" id="videoInput" accept="video/*">
+    <p>▶ Click the canvas to pick a color to remove (transparent background).</p>
+  </div>
+
+  <video id="video" class="hidden"></video>
+  <canvas id="canvas"></canvas>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true }); // keep alpha
+    const videoInput = document.getElementById('videoInput');
+    const uploadSection = document.getElementById('uploadSection');
+
+    let keyColor = null;
+    const threshold = 60;
+
+    videoInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        video.onloadeddata = () => {
+          uploadSection.classList.add('hidden');
+          video.classList.add('hidden');
+          startChromaKey();
+        };
+        video.src = URL.createObjectURL(file);
+        video.load();
+      }
+    });
+
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const frame = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+
+      const index = ((Math.floor(y) * canvas.width) + Math.floor(x)) * 4;
+      keyColor = [
+        frame.data[index],
+        frame.data[index + 1],
+        frame.data[index + 2]
+      ];
+      console.log("Key color set to:", keyColor);
+    });
+
+    function colorDistance(c1, c2) {
+      return Math.sqrt(
+        (c1[0] - c2[0]) ** 2 +
+        (c1[1] - c2[1]) ** 2 +
+        (c1[2] - c2[2]) ** 2
+      );
+    }
+
+    function startChromaKey() {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      video.play();
+
+      function drawFrame() {
+        if (video.paused || video.ended) return;
+
+        tempCtx.clearRect(0, 0, canvas.width, canvas.height);
+        tempCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const frame = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = frame.data;
+
+        if (keyColor) {
+          for (let i = 0; i < data.length; i += 4) {
+            const pixel = [data[i], data[i + 1], data[i + 2]];
+            if (colorDistance(pixel, keyColor) < threshold) {
+              data[i + 3] = 0; // Make transparent
+            }
+          }
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.putImageData(frame, 0, 0);
+        requestAnimationFrame(drawFrame);
+      }
+
+      drawFrame();
+    }
+  </script>
+</body>
+</html>
