@@ -2,21 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Chroma Key - Cropped Edges</title>
+  <title>Chroma Key with Click Start & Custom Start Time</title>
   <style>
     html, body {
-      margin: 0; padding: 0; background: transparent;
-    }
-    body {
-      font-family: sans-serif;
-      color: #fff;
-      text-align: center;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      overflow: hidden;
+      height: 100%;
     }
     canvas {
-      margin-top: 0px;
-      max-width: 100%;
-      background: transparent;
       display: block;
+      max-width: 100%;
+      margin: 0 auto;
+      background: transparent;
     }
   </style>
 </head>
@@ -24,30 +23,29 @@
   <canvas id="canvas"></canvas>
 
   <script>
-    const video = document.createElement('video');
-    video.crossOrigin = "anonymous";
-    video.muted = true;
-    video.loop = true;
-    video.autoplay = true;
-    video.style.display = 'none';
-    document.body.appendChild(video);
+    // Parse ?start=XX from query string
+    function getStartTimeFromURL() {
+      const params = new URLSearchParams(window.location.search);
+      return parseFloat(params.get('start')) || 0;
+    }
 
+    const startTime = getStartTimeFromURL();
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    video.src = 'video_jj.mp4'; // CHANGE VIDEO
-    const keyColor = [87, 84, 108]; // CHANGE COLOR 
-    const threshold = 70; //CHANGE THRESHOLD
+    const video = document.createElement('video');
+    video.crossOrigin = "anonymous";
+    video.muted = true; // allow preload
+    video.loop = true;
+    video.autoplay = false;
+    video.style.display = 'none';
+    document.body.appendChild(video);
 
-    // Cropping margins (pixels)
+    video.src = 'video_jj.mp4';
+
+    const keyColor = [87, 84, 108];
+    const threshold = 70;
     const crop = { top: 0, right: 10, bottom: 10, left: 0 };
-
-    video.addEventListener('loadeddata', () => {
-      canvas.width = video.videoWidth - crop.left - crop.right;
-      canvas.height = video.videoHeight - crop.top - crop.bottom;
-      video.play();
-      drawFrame();
-    });
 
     function colorDistance(c1, c2) {
       return Math.sqrt(
@@ -58,7 +56,7 @@
     }
 
     function drawFrame() {
-      if (video.paused || video.ended) return;
+      if (!video.videoWidth) return;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -67,10 +65,10 @@
 
       ctx.drawImage(
         video,
-        crop.left, crop.top, // source x,y
-        sw, sh,              // source width,height
-        0, 0,                // destination x,y
-        canvas.width, canvas.height // destination width,height
+        crop.left, crop.top,
+        sw, sh,
+        0, 0,
+        canvas.width, canvas.height
       );
 
       const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -84,8 +82,36 @@
       }
 
       ctx.putImageData(frame, 0, 0);
-      requestAnimationFrame(drawFrame);
+
+      if (!video.paused && !video.ended) {
+        requestAnimationFrame(drawFrame);
+      }
     }
+
+    video.addEventListener('loadeddata', () => {
+      canvas.width = video.videoWidth - crop.left - crop.right;
+      canvas.height = video.videoHeight - crop.top - crop.bottom;
+
+      video.currentTime = startTime;
+
+      video.addEventListener('seeked', () => {
+        drawFrame(); // draw paused frame
+      }, { once: true });
+    });
+
+    const handleClick = async () => {
+      try {
+        video.currentTime = startTime; // ensure correct start
+        video.muted = false;
+        await video.play();
+        drawFrame();
+        document.removeEventListener('click', handleClick);
+      } catch (err) {
+        console.error('Playback failed:', err.message);
+      }
+    };
+
+    document.addEventListener('click', handleClick);
   </script>
 </body>
 </html>
