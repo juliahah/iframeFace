@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Chroma Key with Click Start & Custom Start Time</title>
+  <title>Chroma Key with Start/End Time</title>
   <style>
     html, body {
       margin: 0;
@@ -23,20 +23,21 @@
   <canvas id="canvas"></canvas>
 
   <script>
-    // Parse ?start=XX from query string
-    function getStartTimeFromURL() {
+    function getTimeParams() {
       const params = new URLSearchParams(window.location.search);
-      return parseFloat(params.get('start')) || 0;
+      const start = parseFloat(params.get('start')) || 0;
+      const end = parseFloat(params.get('end')) || null;
+      return { start, end };
     }
 
-    const startTime = getStartTimeFromURL();
+    const { start: startTime, end: endTime } = getTimeParams();
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     const video = document.createElement('video');
     video.crossOrigin = "anonymous";
-    video.muted = true; // allow preload
-    video.loop = true;
+    video.muted = true;
+    video.loop = false;
     video.autoplay = false;
     video.style.display = 'none';
     document.body.appendChild(video);
@@ -84,6 +85,10 @@
       ctx.putImageData(frame, 0, 0);
 
       if (!video.paused && !video.ended) {
+        if (endTime && video.currentTime >= endTime) {
+          video.pause();
+          return;
+        }
         requestAnimationFrame(drawFrame);
       }
     }
@@ -93,15 +98,14 @@
       canvas.height = video.videoHeight - crop.top - crop.bottom;
 
       video.currentTime = startTime;
-
       video.addEventListener('seeked', () => {
-        drawFrame(); // draw paused frame
+        drawFrame(); // show paused frame before playing
       }, { once: true });
     });
 
     const handleClick = async () => {
       try {
-        video.currentTime = startTime; // ensure correct start
+        video.currentTime = startTime;
         video.muted = false;
         await video.play();
         drawFrame();
